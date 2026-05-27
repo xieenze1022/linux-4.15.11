@@ -285,43 +285,28 @@ int dw_pcie_host_init(struct pcie_port *pp)
 	int i, ret;
 	struct resource_entry *win, *tmp;
 
-	dev_info(dev, "dw-pcie-dbg: dw_pcie_host_init enter, node=%s\n",
-		 np ? np->full_name : "NULL");
-
 	cfg_res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "config");
 	if (cfg_res) {
 		pp->cfg0_size = resource_size(cfg_res) / 2;
 		pp->cfg1_size = resource_size(cfg_res) / 2;
 		pp->cfg0_base = cfg_res->start;
 		pp->cfg1_base = cfg_res->start + pp->cfg0_size;
-		dev_info(dev, "dw-pcie-dbg: named config resource %pR\n", cfg_res);
 	} else if (!pp->va_cfg0_base) {
 		dev_err(dev, "missing *config* reg space\n");
-		dev_info(dev, "dw-pcie-dbg: will try to get config window from ranges\n");
 	}
 
 	bridge = pci_alloc_host_bridge(0);
-	if (!bridge) {
-		dev_err(dev, "dw-pcie-dbg: failed to allocate host bridge\n");
+	if (!bridge)
 		return -ENOMEM;
-	}
 
 	ret = of_pci_get_host_bridge_resources(np, 0, 0xff,
 					&bridge->windows, &pp->io_base);
-	if (ret) {
-		dev_err(dev, "dw-pcie-dbg: failed to parse host bridge resources, ret=%d\n",
-			ret);
+	if (ret)
 		return ret;
-	}
-	dev_info(dev, "dw-pcie-dbg: host bridge resources parsed, io_base=0x%llx\n",
-		 (unsigned long long)pp->io_base);
 
 	ret = devm_request_pci_bus_resources(dev, &bridge->windows);
-	if (ret) {
-		dev_err(dev, "dw-pcie-dbg: failed to request PCI bus resources, ret=%d\n",
-			ret);
+	if (ret)
 		goto error;
-	}
 
 	/* Get the I/O and memory ranges from DT */
 	resource_list_for_each_entry_safe(win, tmp, &bridge->windows) {
@@ -337,10 +322,6 @@ int dw_pcie_host_init(struct pcie_port *pp)
 				pp->io->name = "I/O";
 				pp->io_size = resource_size(pp->io);
 				pp->io_bus_addr = pp->io->start - win->offset;
-				dev_info(dev, "dw-pcie-dbg: IO range %pR, bus_addr=0x%llx, size=0x%llx\n",
-					 pp->io,
-					 (unsigned long long)pp->io_bus_addr,
-					 (unsigned long long)pp->io_size);
 			}
 			break;
 		case IORESOURCE_MEM:
@@ -348,10 +329,6 @@ int dw_pcie_host_init(struct pcie_port *pp)
 			pp->mem->name = "MEM";
 			pp->mem_size = resource_size(pp->mem);
 			pp->mem_bus_addr = pp->mem->start - win->offset;
-			dev_info(dev, "dw-pcie-dbg: MEM range %pR, bus_addr=0x%llx, size=0x%llx\n",
-				 pp->mem,
-				 (unsigned long long)pp->mem_bus_addr,
-				 (unsigned long long)pp->mem_size);
 			break;
 		case 0:
 			pp->cfg = win->res;
@@ -359,36 +336,14 @@ int dw_pcie_host_init(struct pcie_port *pp)
 			pp->cfg1_size = resource_size(pp->cfg) / 2;
 			pp->cfg0_base = pp->cfg->start;
 			pp->cfg1_base = pp->cfg->start + pp->cfg0_size;
-			dev_info(dev, "dw-pcie-dbg: CFG range %pR, cfg0=0x%llx/0x%x, cfg1=0x%llx/0x%x\n",
-				 pp->cfg,
-				 (unsigned long long)pp->cfg0_base, pp->cfg0_size,
-				 (unsigned long long)pp->cfg1_base, pp->cfg1_size);
 			break;
 		case IORESOURCE_BUS:
 			pp->busn = win->res;
-			dev_info(dev, "dw-pcie-dbg: BUS range %pR\n", pp->busn);
 			break;
 		}
 	}
 
-	if (!pp->mem) {
-		dev_err(dev, "dw-pcie-dbg: missing MEM range from DT ranges\n");
-		ret = -EINVAL;
-		goto error;
-	}
-
-	if (!pp->busn) {
-		dev_err(dev, "dw-pcie-dbg: missing bus-range resource\n");
-		ret = -EINVAL;
-		goto error;
-	}
-
 	if (!pci->dbi_base) {
-		if (!pp->cfg) {
-			dev_err(dev, "dw-pcie-dbg: missing config range for DBI remap\n");
-			ret = -EINVAL;
-			goto error;
-		}
 		pci->dbi_base = devm_pci_remap_cfgspace(dev,
 						pp->cfg->start,
 						resource_size(pp->cfg));
@@ -397,11 +352,6 @@ int dw_pcie_host_init(struct pcie_port *pp)
 			ret = -ENOMEM;
 			goto error;
 		}
-		dev_info(dev, "dw-pcie-dbg: DBI remapped from cfg range at %p\n",
-			 pci->dbi_base);
-	} else {
-		dev_info(dev, "dw-pcie-dbg: DBI already mapped at %p\n",
-			 pci->dbi_base);
 	}
 
 	pp->mem_base = pp->mem->start;
@@ -415,9 +365,6 @@ int dw_pcie_host_init(struct pcie_port *pp)
 			goto error;
 		}
 	}
-	dev_info(dev, "dw-pcie-dbg: CFG0 mapped at %p, base=0x%llx, size=0x%x\n",
-		 pp->va_cfg0_base, (unsigned long long)pp->cfg0_base,
-		 pp->cfg0_size);
 
 	if (!pp->va_cfg1_base) {
 		pp->va_cfg1_base = devm_pci_remap_cfgspace(dev,
@@ -429,15 +376,10 @@ int dw_pcie_host_init(struct pcie_port *pp)
 			goto error;
 		}
 	}
-	dev_info(dev, "dw-pcie-dbg: CFG1 mapped at %p, base=0x%llx, size=0x%x\n",
-		 pp->va_cfg1_base, (unsigned long long)pp->cfg1_base,
-		 pp->cfg1_size);
 
 	ret = of_property_read_u32(np, "num-viewport", &pci->num_viewport);
 	if (ret)
 		pci->num_viewport = 2;
-	dev_info(dev, "dw-pcie-dbg: num_viewport=%u%s\n", pci->num_viewport,
-		 ret ? " (default)" : "");
 
 	if (IS_ENABLED(CONFIG_PCI_MSI)) {
 		if (!pp->ops->msi_host_init) {
@@ -449,36 +391,23 @@ int dw_pcie_host_init(struct pcie_port *pp)
 				ret = -ENXIO;
 				goto error;
 			}
-			dev_info(dev, "dw-pcie-dbg: MSI irq domain created, max_irqs=%d\n",
-				 MAX_MSI_IRQS);
 
 			for (i = 0; i < MAX_MSI_IRQS; i++)
 				irq_create_mapping(pp->irq_domain, i);
-			dev_info(dev, "dw-pcie-dbg: MSI mappings created\n");
 		} else {
-			dev_info(dev, "dw-pcie-dbg: call platform msi_host_init()\n");
 			ret = pp->ops->msi_host_init(pp, &dw_pcie_msi_chip);
-			if (ret < 0) {
-				dev_err(dev, "dw-pcie-dbg: msi_host_init failed, ret=%d\n",
-					ret);
+			if (ret < 0)
 				goto error;
-			}
 		}
 	}
 
 	if (pp->ops->host_init) {
-		dev_info(dev, "dw-pcie-dbg: call platform host_init()\n");
 		ret = pp->ops->host_init(pp);
-		if (ret) {
-			dev_err(dev, "dw-pcie-dbg: platform host_init failed, ret=%d\n",
-				ret);
+		if (ret)
 			goto error;
-		}
-		dev_info(dev, "dw-pcie-dbg: platform host_init() done\n");
 	}
 
 	pp->root_bus_nr = pp->busn->start;
-	dev_info(dev, "dw-pcie-dbg: root_bus_nr=%d\n", pp->root_bus_nr);
 
 	bridge->dev.parent = dev;
 	bridge->sysdata = pp;
@@ -491,17 +420,11 @@ int dw_pcie_host_init(struct pcie_port *pp)
 		dw_pcie_msi_chip.dev = dev;
 	}
 
-	dev_info(dev, "dw-pcie-dbg: start pci_scan_root_bus_bridge()\n");
 	ret = pci_scan_root_bus_bridge(bridge);
-	if (ret) {
-		dev_err(dev, "dw-pcie-dbg: pci_scan_root_bus_bridge failed, ret=%d\n",
-			ret);
+	if (ret)
 		goto error;
-	}
 
 	bus = bridge->bus;
-	dev_info(dev, "dw-pcie-dbg: pci_scan_root_bus_bridge() done, bus=%04x:%02x\n",
-		 pci_domain_nr(bus), bus->number);
 
 	if (pp->ops->scan_bus)
 		pp->ops->scan_bus(pp);
@@ -513,12 +436,9 @@ int dw_pcie_host_init(struct pcie_port *pp)
 		pcie_bus_configure_settings(child);
 
 	pci_bus_add_devices(bus);
-	dev_info(dev, "dw-pcie-dbg: dw_pcie_host_init exit successfully\n");
 	return 0;
 
 error:
-	dev_err(dev, "dw-pcie-dbg: dw_pcie_host_init exit with error ret=%d\n",
-		ret);
 	pci_free_host_bridge(bridge);
 	return ret;
 }
@@ -670,12 +590,7 @@ void dw_pcie_setup_rc(struct pcie_port *pp)
 	u32 val;
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
 
-	dev_info(pci->dev, "dw-pcie-dbg: setup_rc enter\n");
 	dw_pcie_setup(pci);
-
-	val = dw_pcie_readl_dbi(pci, PCI_VENDOR_ID);
-	dev_info(pci->dev, "dw-pcie-dbg: setup_rc DBI vendor/device raw=0x%08x\n",
-		 val);
 
 	/* setup RC BARs */
 	dw_pcie_writel_dbi(pci, PCI_BASE_ADDRESS_0, 0x00000004);
@@ -710,25 +625,16 @@ void dw_pcie_setup_rc(struct pcie_port *pp)
 	if (!pp->ops->rd_other_conf) {
 		/* get iATU unroll support */
 		pci->iatu_unroll_enabled = dw_pcie_iatu_unroll_enabled(pci);
-		dev_info(pci->dev, "dw-pcie-dbg: iATU unroll %s\n",
+		dev_dbg(pci->dev, "iATU unroll: %s\n",
 			pci->iatu_unroll_enabled ? "enabled" : "disabled");
 
-		dev_info(pci->dev, "dw-pcie-dbg: program MEM iATU: cpu=0x%llx bus=0x%llx size=0x%llx\n",
-			 (unsigned long long)pp->mem_base,
-			 (unsigned long long)pp->mem_bus_addr,
-			 (unsigned long long)pp->mem_size);
 		dw_pcie_prog_outbound_atu(pci, PCIE_ATU_REGION_INDEX0,
 					  PCIE_ATU_TYPE_MEM, pp->mem_base,
 					  pp->mem_bus_addr, pp->mem_size);
-		if (pci->num_viewport > 2) {
-			dev_info(pci->dev, "dw-pcie-dbg: program IO iATU: cpu=0x%llx bus=0x%llx size=0x%llx\n",
-				 (unsigned long long)pp->io_base,
-				 (unsigned long long)pp->io_bus_addr,
-				 (unsigned long long)pp->io_size);
+		if (pci->num_viewport > 2)
 			dw_pcie_prog_outbound_atu(pci, PCIE_ATU_REGION_INDEX2,
 						  PCIE_ATU_TYPE_IO, pp->io_base,
 						  pp->io_bus_addr, pp->io_size);
-		}
 	}
 
 	dw_pcie_wr_own_conf(pp, PCI_BASE_ADDRESS_0, 4, 0);
@@ -741,9 +647,6 @@ void dw_pcie_setup_rc(struct pcie_port *pp)
 	dw_pcie_dbi_ro_wr_dis(pci);
 
 	dw_pcie_rd_own_conf(pp, PCIE_LINK_WIDTH_SPEED_CONTROL, 4, &val);
-	dev_info(pci->dev, "dw-pcie-dbg: link width/speed ctrl before speed change=0x%08x\n",
-		 val);
 	val |= PORT_LOGIC_SPEED_CHANGE;
 	dw_pcie_wr_own_conf(pp, PCIE_LINK_WIDTH_SPEED_CONTROL, 4, val);
-	dev_info(pci->dev, "dw-pcie-dbg: setup_rc exit\n");
 }
